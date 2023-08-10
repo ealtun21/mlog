@@ -1,7 +1,7 @@
 use chrono::{Datelike, Local, Timelike};
 use clap::Parser;
 use rumqttc::{
-    AsyncClient, ConnectReturnCode, Event, MqttOptions, Packet, Publish, QoS, SubscribeReasonCode,
+    AsyncClient, ConnectReturnCode, Event, MqttOptions, Packet, Publish, QoS, SubscribeReasonCode, EventLoop,
 };
 use std::{
     collections::HashMap,
@@ -62,9 +62,20 @@ struct Args {
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
     let args = Args::parse();
+    let mqttoptions = configure_mqtt(&args);
 
-    let mut mqttoptions = MqttOptions::new(args.id, args.broker, args.port);
-    
+    let topics = initialize_topics(&args)?;
+
+    let (client, mut eventloop) = AsyncClient::new(mqttoptions, 10);
+
+    let mut files = initialize_files_and_subscriptions(&client, &topics).await;
+
+    process_events(&mut eventloop, &mut files).await
+}
+
+fn configure_mqtt(args: &Args) -> MqttOptions {
+    let mut mqttoptions = MqttOptions::new(&args.id, &args.broker, args.port);
+
     if !args.auth.is_empty() {
         mqttoptions.set_credentials(args.auth[0].clone(), args.auth[1].clone());
     }
@@ -80,51 +91,55 @@ async fn main() -> std::io::Result<()> {
     mqttoptions.set_clean_session(args.clean_session);
     mqttoptions.set_keep_alive(Duration::from_secs(args.keep_alive));
 
-    let topics = if let Some(path) = args.topics_file {
-        fs::read_to_string(&path)?
+    mqttoptions
+}
+
+fn initialize_topics(args: &Args) -> std::io::Result<Vec<String>> {
+    if let Some(path) = &args.topics_file {
+        Ok(fs::read_to_string(path)?
             .trim()
             .lines()
             .map(str::trim)
             .map(String::from)
-            .collect()
+            .collect())
     } else {
-        args.topics
-    };
+        Ok(args.topics.clone())
+    }
+}
 
-    let (client, mut eventloop) = AsyncClient::new(mqttoptions, 10);
-
+async fn initialize_files_and_subscriptions(client: &AsyncClient, topics: &[String]) -> HashMap<String, File> {
     let mut files = HashMap::new();
-    println!("Selected topics: {topics:?}");
+    println!("Selected topics: {:?}", topics);
     for topic in topics {
-        if client.subscribe(&topic, QoS::ExactlyOnce).await.is_err() {
-            eprintln!("Failed to subscribe to {}", &topic);
-        };
+        if client.subscribe(topic, QoS::ExactlyOnce).await.is_err() {
+            eprintln!("Failed to subscribe to {}", topic);
+        }
         files.insert(
             topic.clone(),
             OpenOptions::new()
                 .append(true)
                 .create(true)
-                .open(format!("{topic}.txt"))
+                .open(format!("{}.txt", topic))
                 .expect("Unable to create files"),
         );
     }
+    files
+}
 
+async fn process_events(eventloop: &mut EventLoop, files: &mut HashMap<String, File>) -> std::io::Result<()> {
     loop {
         match eventloop.poll().await {
             Ok(notification) => match notification {
                 Event::Incoming(p) => match p {
                     Packet::Publish(p) => {
                         let timestamp = generate_timestamp().into_bytes();
-                        write_to_file(&timestamp,&p, &files);
-                        write_to_stdout(&timestamp,&p)
+                        write_to_file(&timestamp, &p, files);
+                        write_to_stdout(&timestamp, &p);
                     }
                     Packet::SubAck(s) => {
                         for code in s.return_codes {
-                            match code {
-                                SubscribeReasonCode::Failure => {
-                                    eprintln!("Got a subscribe fail packet!");
-                                }
-                                SubscribeReasonCode::Success(_) => (),
+                            if code == SubscribeReasonCode::Failure {
+                                eprintln!("Got a subscribe fail packet!");
                             }
                         }
                     }
@@ -137,7 +152,7 @@ async fn main() -> std::io::Result<()> {
                 Event::Outgoing(_) => (),
             },
             Err(e) => {
-                eprintln!("{e}");
+                eprintln!("{}", e);
                 break;
             }
         }
