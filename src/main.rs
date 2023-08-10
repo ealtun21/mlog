@@ -46,7 +46,9 @@ async fn main() -> std::io::Result<()> {
 
     let topics = if let Some(path) = args.topics_file {
         fs::read_to_string(&path)?
+            .trim()
             .lines()
+            .map(str::trim)
             .map(String::from)
             .collect()
     } else {
@@ -107,7 +109,7 @@ fn write(data: &Publish, files: &HashMap<String, File>) {
     res.extend_from_slice(&timestamp);
     res.extend_from_slice(&data.payload);
 
-    io::stdout().write_all(&res).unwrap();
+    
     match files.get(data.topic.as_str()) {
         Some(mut file) => file.write_all(&res).unwrap(),
         None => eprintln!(
@@ -115,6 +117,13 @@ fn write(data: &Publish, files: &HashMap<String, File>) {
             data.topic
         ),
     };
+
+    res.clear();
+    res.extend_from_slice(&timestamp);
+    res.extend_from_slice(format!("[{}] ",data.topic.as_str()).as_bytes());
+    res.extend_from_slice(&data.payload);
+
+    io::stdout().write_all(&res).unwrap();
 }
 
 fn generate_timestamp() -> String {
