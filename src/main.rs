@@ -113,7 +113,11 @@ async fn main() -> std::io::Result<()> {
         match eventloop.poll().await {
             Ok(notification) => match notification {
                 Event::Incoming(p) => match p {
-                    Packet::Publish(p) => write(&p, &files),
+                    Packet::Publish(p) => {
+                        let timestamp = generate_timestamp().into_bytes();
+                        write_to_file(&timestamp,&p, &files);
+                        write_to_stdout(&timestamp,&p)
+                    }
                     Packet::SubAck(s) => {
                         for code in s.return_codes {
                             match code {
@@ -142,26 +146,26 @@ async fn main() -> std::io::Result<()> {
     Ok(())
 }
 
-fn write(data: &Publish, files: &HashMap<String, File>) {
-    let timestamp = generate_timestamp().into_bytes();
-
+fn write_to_file(timestamp: &Vec<u8>, data: &Publish, files: &HashMap<String, File>) {
     let mut res = Vec::with_capacity(data.payload.len() + timestamp.len());
     res.extend_from_slice(&timestamp);
     res.extend_from_slice(&data.payload);
-    res.extend_from_slice("\n".to_string().as_bytes());
+    res.extend_from_slice("\n".as_bytes());
 
     match files.get(data.topic.as_str()) {
         Some(mut file) => {
             file.write_all(&res).unwrap();
             file.flush().unwrap();
-        },
+        }
         None => eprintln!(
             "Got packet from topic {}, but that topic file was not created!",
             data.topic
         ),
     };
+}
 
-    res.clear();
+fn write_to_stdout(timestamp: &Vec<u8>, data: &Publish) {
+    let mut res = Vec::with_capacity(data.payload.len() + timestamp.len());
     res.extend_from_slice(&timestamp);
     res.extend_from_slice(
         format!(
@@ -173,7 +177,7 @@ fn write(data: &Publish, files: &HashMap<String, File>) {
         .as_bytes(),
     );
     res.extend_from_slice(&data.payload);
-    res.extend_from_slice("\n".to_string().as_bytes());
+    res.extend_from_slice("\n".as_bytes());
 
     io::stdout().write_all(&res).unwrap();
     ::std::io::stdout().flush().unwrap();
