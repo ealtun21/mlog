@@ -64,6 +64,7 @@ async fn main() -> std::io::Result<()> {
     let args = Args::parse();
 
     let mut mqttoptions = MqttOptions::new(args.id, args.broker, args.port);
+    
     if !args.auth.is_empty() {
         mqttoptions.set_credentials(args.auth[0].clone(), args.auth[1].clone());
     }
@@ -77,7 +78,6 @@ async fn main() -> std::io::Result<()> {
         mqttoptions.set_request_channel_capacity(c_cap);
     }
     mqttoptions.set_clean_session(args.clean_session);
-
     mqttoptions.set_keep_alive(Duration::from_secs(args.keep_alive));
 
     let topics = if let Some(path) = args.topics_file {
@@ -148,6 +148,7 @@ async fn main() -> std::io::Result<()> {
 
 fn write_to_file(timestamp: &Vec<u8>, data: &Publish, files: &HashMap<String, File>) {
     let mut res = Vec::with_capacity(data.payload.len() + timestamp.len());
+
     res.extend_from_slice(&timestamp);
     res.extend_from_slice(&data.payload);
     res.extend_from_slice("\n".as_bytes());
@@ -166,6 +167,7 @@ fn write_to_file(timestamp: &Vec<u8>, data: &Publish, files: &HashMap<String, Fi
 
 fn write_to_stdout(timestamp: &Vec<u8>, data: &Publish) {
     let mut res = Vec::with_capacity(data.payload.len() + timestamp.len());
+
     res.extend_from_slice(&timestamp);
     res.extend_from_slice(
         format!(
@@ -185,6 +187,7 @@ fn write_to_stdout(timestamp: &Vec<u8>, data: &Publish) {
 
 fn generate_timestamp() -> String {
     let now = Local::now();
+
     format!(
         "{RESET}[{GREEN}{:04}-{:02}-{:02} {:02}:{:02}:{:02}.{:03}{RESET}] ",
         now.year(),
