@@ -1,6 +1,6 @@
 use chrono::{Datelike, Local, Timelike};
 use clap::Parser;
-use rumqttc::{AsyncClient, Event, MqttOptions, Packet, Publish, QoS, SubscribeReasonCode};
+use rumqttc::{AsyncClient, Event, MqttOptions, Packet, Publish, QoS, SubscribeReasonCode, ConnectReturnCode};
 use std::{
     collections::HashMap,
     fs::{File, OpenOptions, self},
@@ -21,7 +21,7 @@ struct Args {
     port: u16,
 
     /// The topics that the will be listened for
-    #[arg(short, long, num_args(0..), required=true, conflicts_with("topics_file"))]
+    #[arg(short, long, num_args(1..), required=true, conflicts_with("topics_file"))]
     topics: Vec<String>,
 
     /// Path to a file containing topics
@@ -58,7 +58,7 @@ async fn main() -> std::io::Result<()> {
     let (client, mut eventloop) = AsyncClient::new(mqttoptions, 10);
 
     let mut files = HashMap::new();
-    println!("Topics: {:?}", topics);
+    println!("Selected topics: {:?}", topics);
     for topic in topics {
         if client.subscribe(&topic, QoS::ExactlyOnce).await.is_err() {
             eprintln!("Failed to subscribe to {}", &topic);
@@ -88,6 +88,7 @@ async fn main() -> std::io::Result<()> {
                             }
                         }
                     }
+                    Packet::ConnAck(c) if c.code == ConnectReturnCode::Success => println!("Connection established"),
                     Packet::Disconnect => println!("Got disconnect"),
                     _ => (),
                 },
