@@ -27,7 +27,7 @@ struct Args {
     topics: Vec<String>,
 
     /// Path to a file that lists the topics.
-    #[arg(short = 'f', long = "topics-file")]
+    #[arg(short = 'f', long)]
     topics_file: Option<String>,
 
     /// Identifier for the device connecting to the broker.
@@ -35,7 +35,7 @@ struct Args {
     id: String,
 
     /// Duration in seconds to wait before pinging the broker if there's no other communication.
-    #[arg(short, long = "keep-alive", default_value_t = 5, value_name = "SEC")]
+    #[arg(short, long, default_value_t = 5, value_name = "SEC")]
     keep_alive: u64,
 
     /// Number of concurrent in flight messages
@@ -52,7 +52,11 @@ struct Args {
 
     /// Request channel capacity
     #[arg(short, long)]
-    channel_capacity: Option<usize>
+    channel_capacity: Option<usize>,
+
+    /// Clean Session
+    #[arg(short, long)]
+    clean_session: bool,
 }
 
 #[tokio::main]
@@ -72,6 +76,8 @@ async fn main() -> std::io::Result<()> {
     if let Some(c_cap) = args.channel_capacity {
         mqttoptions.set_request_channel_capacity(c_cap);
     }
+    mqttoptions.set_clean_session(args.clean_session);
+
     mqttoptions.set_keep_alive(Duration::from_secs(args.keep_alive));
 
     let topics = if let Some(path) = args.topics_file {
@@ -142,9 +148,13 @@ fn write(data: &Publish, files: &HashMap<String, File>) {
     let mut res = Vec::with_capacity(data.payload.len() + timestamp.len());
     res.extend_from_slice(&timestamp);
     res.extend_from_slice(&data.payload);
+    res.extend_from_slice("\n".to_string().as_bytes());
 
     match files.get(data.topic.as_str()) {
-        Some(mut file) => file.write_all(&res).unwrap(),
+        Some(mut file) => {
+            file.write_all(&res).unwrap();
+            file.flush().unwrap();
+        },
         None => eprintln!(
             "Got packet from topic {}, but that topic file was not created!",
             data.topic
@@ -153,16 +163,26 @@ fn write(data: &Publish, files: &HashMap<String, File>) {
 
     res.clear();
     res.extend_from_slice(&timestamp);
-    res.extend_from_slice(format!("{RESET}[{BLUE}{}{RESET}] ", data.topic.as_str(), RESET="\x1b[0m",BLUE="\x1b[34m").as_bytes());
+    res.extend_from_slice(
+        format!(
+            "{RESET}[{BLUE}{}{RESET}] ",
+            data.topic.as_str(),
+            RESET = "\x1b[0m",
+            BLUE = "\x1b[34m"
+        )
+        .as_bytes(),
+    );
     res.extend_from_slice(&data.payload);
+    res.extend_from_slice("\n".to_string().as_bytes());
 
     io::stdout().write_all(&res).unwrap();
+    ::std::io::stdout().flush().unwrap();
 }
 
 fn generate_timestamp() -> String {
     let now = Local::now();
     format!(
-        "{RESET}[{GREEN}{:04}-{:02}-{:02} {:02}:{:02}:{:02}.{:03}{RESET}]",
+        "{RESET}[{GREEN}{:04}-{:02}-{:02} {:02}:{:02}:{:02}.{:03}{RESET}] ",
         now.year(),
         now.month(),
         now.day(),
@@ -170,7 +190,7 @@ fn generate_timestamp() -> String {
         now.minute(),
         now.second(),
         now.timestamp_subsec_millis(),
-        RESET="\x1b[0m",
-        GREEN="\x1b[32m",
+        RESET = "\x1b[0m",
+        GREEN = "\x1b[32m",
     )
 }
