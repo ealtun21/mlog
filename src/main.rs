@@ -125,7 +125,7 @@ fn write(data: &Publish, files: &HashMap<String, File>) {
 
     res.clear();
     res.extend_from_slice(&timestamp);
-    res.extend_from_slice(format!("[{}] ", data.topic.as_str()).as_bytes());
+    res.extend_from_slice(format!("{RESET}[{BLUE}{}{RESET}] ", data.topic.as_str(), RESET="\x1b[0m",BLUE="\x1b[34m").as_bytes());
     res.extend_from_slice(&data.payload);
 
     io::stdout().write_all(&res).unwrap();
@@ -134,13 +134,15 @@ fn write(data: &Publish, files: &HashMap<String, File>) {
 fn generate_timestamp() -> String {
     let now = Local::now();
     format!(
-        "[{:04}-{:02}-{:02} {:02}:{:02}:{:02}.{:03}] ",
+        "{RESET}[{GREEN}{:04}-{:02}-{:02} {:02}:{:02}:{:02}.{:03}{RESET}]",
         now.year(),
         now.month(),
         now.day(),
         now.hour(),
         now.minute(),
         now.second(),
-        now.timestamp_subsec_millis()
+        now.timestamp_subsec_millis(),
+        RESET="\x1b[0m",
+        GREEN="\x1b[32m",
     )
 }
