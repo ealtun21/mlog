@@ -11,3 +11,8 @@ chrono = "0.4.26"
 clap = { version = "4.3.21", features = ["derive"] }
 rumqttc = "0.22.0"
 tokio = { version = "1.29.1", features = ["rt-multi-thread"] }
+
+[profile.release]
+strip = true
+lto = true
+codegen-units = 1
