@@ -1,9 +1,11 @@
 use chrono::{Datelike, Local, Timelike};
 use clap::Parser;
-use rumqttc::{AsyncClient, Event, MqttOptions, Packet, Publish, QoS, SubscribeReasonCode, ConnectReturnCode};
+use rumqttc::{
+    AsyncClient, ConnectReturnCode, Event, MqttOptions, Packet, Publish, QoS, SubscribeReasonCode,
+};
 use std::{
     collections::HashMap,
-    fs::{File, OpenOptions, self},
+    fs::{self, File, OpenOptions},
     io::{self, Write},
     time::Duration,
 };
@@ -58,7 +60,7 @@ async fn main() -> std::io::Result<()> {
     let (client, mut eventloop) = AsyncClient::new(mqttoptions, 10);
 
     let mut files = HashMap::new();
-    println!("Selected topics: {:?}", topics);
+    println!("Selected topics: {topics:?}");
     for topic in topics {
         if client.subscribe(&topic, QoS::ExactlyOnce).await.is_err() {
             eprintln!("Failed to subscribe to {}", &topic);
@@ -88,7 +90,9 @@ async fn main() -> std::io::Result<()> {
                             }
                         }
                     }
-                    Packet::ConnAck(c) if c.code == ConnectReturnCode::Success => println!("Connection established"),
+                    Packet::ConnAck(c) if c.code == ConnectReturnCode::Success => {
+                        println!("Connection established");
+                    }
                     Packet::Disconnect => println!("Got disconnect"),
                     _ => (),
                 },
@@ -106,11 +110,11 @@ async fn main() -> std::io::Result<()> {
 
 fn write(data: &Publish, files: &HashMap<String, File>) {
     let timestamp = generate_timestamp().into_bytes();
+
     let mut res = Vec::with_capacity(data.payload.len() + timestamp.len());
     res.extend_from_slice(&timestamp);
     res.extend_from_slice(&data.payload);
 
-    
     match files.get(data.topic.as_str()) {
         Some(mut file) => file.write_all(&res).unwrap(),
         None => eprintln!(
@@ -121,7 +125,7 @@ fn write(data: &Publish, files: &HashMap<String, File>) {
 
     res.clear();
     res.extend_from_slice(&timestamp);
-    res.extend_from_slice(format!("[{}] ",data.topic.as_str()).as_bytes());
+    res.extend_from_slice(format!("[{}] ", data.topic.as_str()).as_bytes());
     res.extend_from_slice(&data.payload);
 
     io::stdout().write_all(&res).unwrap();
