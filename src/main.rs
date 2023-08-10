@@ -14,29 +14,45 @@ use std::{
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
-    /// The broker's domain name or IP address
+    /// Domain name or IP address of the broker.
     #[arg(short, long)]
     broker: String,
 
-    /// The port number on which broker must be listening for incoming connections
+    /// Port on which the broker is expected to listen for incoming connections.
     #[arg(short, long)]
     port: u16,
 
-    /// The topics that the will be listened for
+    /// Topics to be monitored.
     #[arg(short, long, num_args(1..), required=true, conflicts_with("topics_file"))]
     topics: Vec<String>,
 
-    /// Path to a file containing topics
+    /// Path to a file that lists the topics.
     #[arg(short = 'f', long = "topics-file")]
     topics_file: Option<String>,
 
-    /// The string to identify the device connecting to a broker
+    /// Identifier for the device connecting to the broker.
     #[arg(short, long, default_value = "mqtt-logger")]
     id: String,
 
-    /// The number of seconds after which client should ping the broker if there is no other data exchange
+    /// Duration in seconds to wait before pinging the broker if there's no other communication.
     #[arg(short, long = "keep-alive", default_value_t = 5, value_name = "SEC")]
     keep_alive: u64,
+
+    /// Number of concurrent in flight messages
+    #[arg(long)]
+    inflight: Option<u16>,
+
+    /// Credentials for logging in: username followed by password.
+    #[arg(short, long, num_args(2))]
+    auth: Vec<String>,
+
+    /// Max packet size: incoming followed by outgoing.
+    #[arg(short, long, num_args(2))]
+    max_packet_size: Vec<usize>,
+
+    /// Request channel capacity
+    #[arg(short, long)]
+    channel_capacity: Option<usize>
 }
 
 #[tokio::main]
@@ -44,6 +60,18 @@ async fn main() -> std::io::Result<()> {
     let args = Args::parse();
 
     let mut mqttoptions = MqttOptions::new(args.id, args.broker, args.port);
+    if !args.auth.is_empty() {
+        mqttoptions.set_credentials(args.auth[0].clone(), args.auth[1].clone());
+    }
+    if let Some(inflight) = args.inflight {
+        mqttoptions.set_inflight(inflight);
+    }
+    if !args.max_packet_size.is_empty() {
+        mqttoptions.set_max_packet_size(args.max_packet_size[0], args.max_packet_size[1]);
+    }
+    if let Some(c_cap) = args.channel_capacity {
+        mqttoptions.set_request_channel_capacity(c_cap);
+    }
     mqttoptions.set_keep_alive(Duration::from_secs(args.keep_alive));
 
     let topics = if let Some(path) = args.topics_file {
