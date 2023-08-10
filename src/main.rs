@@ -109,17 +109,17 @@ fn initialize_topics(args: &Args) -> std::io::Result<Vec<String>> {
 
 async fn initialize_files_and_subscriptions(client: &AsyncClient, topics: &[String]) -> HashMap<String, File> {
     let mut files = HashMap::new();
-    println!("Selected topics: {:?}", topics);
+    println!("Selected topics: {topics:?}");
     for topic in topics {
         if client.subscribe(topic, QoS::ExactlyOnce).await.is_err() {
-            eprintln!("Failed to subscribe to {}", topic);
+            eprintln!("Failed to subscribe to {topic}");
         }
         files.insert(
             topic.clone(),
             OpenOptions::new()
                 .append(true)
                 .create(true)
-                .open(format!("{}.txt", topic))
+                .open(format!("{topic}.txt"))
                 .expect("Unable to create files"),
         );
     }
@@ -152,7 +152,7 @@ async fn process_events(eventloop: &mut EventLoop, files: &mut HashMap<String, F
                 Event::Outgoing(_) => (),
             },
             Err(e) => {
-                eprintln!("{}", e);
+                eprintln!("{e}");
                 break;
             }
         }
@@ -164,7 +164,7 @@ async fn process_events(eventloop: &mut EventLoop, files: &mut HashMap<String, F
 fn write_to_file(timestamp: &Vec<u8>, data: &Publish, files: &HashMap<String, File>) {
     let mut res = Vec::with_capacity(data.payload.len() + timestamp.len());
 
-    res.extend_from_slice(&timestamp);
+    res.extend_from_slice(timestamp);
     res.extend_from_slice(&data.payload);
     res.extend_from_slice("\n".as_bytes());
 
@@ -183,7 +183,7 @@ fn write_to_file(timestamp: &Vec<u8>, data: &Publish, files: &HashMap<String, Fi
 fn write_to_stdout(timestamp: &Vec<u8>, data: &Publish) {
     let mut res = Vec::with_capacity(data.payload.len() + timestamp.len());
 
-    res.extend_from_slice(&timestamp);
+    res.extend_from_slice(timestamp);
     res.extend_from_slice(
         format!(
             "{RESET}[{BLUE}{}{RESET}] ",
